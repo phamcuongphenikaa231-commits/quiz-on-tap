@@ -1,4 +1,4 @@
-import { MusicProvider } from "@/components/music/music-provider";
+import { StudyMusicProvider } from "@/components/music/study-music-provider";
 import { SnowfallWrapper } from "@/components/snowfall-wrapper";
 
 /**
@@ -6,7 +6,7 @@ import { SnowfallWrapper } from "@/components/snowfall-wrapper";
  * /dashboard, /mon/[slug], /quiz/[quizId]
  *
  * Wraps children with:
- * - MusicProvider: keeps music playing across page navigations
+ * - StudyMusicProvider: single persistent HTMLAudioElement for MP3 background playback
  * - SnowfallWrapper: snowfall effect (client-only, ssr:false)
  *
  * Admin, login, device-limit are NOT in this route group
@@ -18,9 +18,9 @@ export default function StudentLayout({
   children: React.ReactNode;
 }) {
   return (
-    <MusicProvider>
+    <StudyMusicProvider>
       <SnowfallWrapper />
       {children}
-    </MusicProvider>
+    </StudyMusicProvider>
   );
 }

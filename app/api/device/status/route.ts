@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getDeviceCookieToken, hashDeviceToken } from "@/lib/device/device-cookie";
 import { jsonOk, jsonError } from "@/lib/api-response";
+import { isDeviceLimitBypassed } from "@/lib/device/device-limit-config";
 
 export async function GET() {
   try {
@@ -13,6 +14,14 @@ export async function GET() {
     if (!user) {
       return jsonError("UNAUTHENTICATED", "Bạn chưa đăng nhập", 401);
     }
+
+    // ── Bypass giới hạn thiết bị trong môi trường development ──────────────
+    // Auth vẫn bắt buộc (kiểm tra ở trên rồi mới tới đây).
+    if (isDeviceLimitBypassed()) {
+      console.info("[Device Limit] Bypassed in local development (status)");
+      return jsonOk({ active: true, bypassed: true });
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const rawToken = await getDeviceCookieToken();
     if (!rawToken) {

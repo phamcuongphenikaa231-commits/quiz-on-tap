@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth/require-admin";
 import Link from "next/link";
-import { FolderTree, Users, FileSpreadsheet, ArrowLeft, ShieldCheck } from "lucide-react";
+import { FolderTree, Users, FileSpreadsheet, ArrowLeft, ShieldCheck, Music } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -37,21 +37,28 @@ export default async function AdminLayout({
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
             >
               <FolderTree className="h-4 w-4 text-primary" />
-              <span>Nội dung</span>
+              <span className="hidden sm:inline">Nội dung</span>
+            </Link>
+            <Link
+              href="/admin/music"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+            >
+              <Music className="h-4 w-4 text-purple-500" />
+              <span className="hidden sm:inline">Nhạc học bài</span>
             </Link>
             <Link
               href="/admin/users"
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
             >
               <Users className="h-4 w-4 text-blue-500" />
-              <span>Học viên</span>
+              <span className="hidden sm:inline">Học viên</span>
             </Link>
             <Link
               href="/admin/import"
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
             >
               <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-              <span>Nhập câu hỏi</span>
+              <span className="hidden sm:inline">Nhập câu hỏi</span>
             </Link>
           </nav>
         </div>

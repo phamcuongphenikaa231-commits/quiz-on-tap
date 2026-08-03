@@ -73,6 +73,7 @@ export default function LoginPage() {
         return;
       }
 
+      // Đăng ký thành công (bao gồm DEVICE_BYPASSED khi dev mode)
       router.push("/dashboard");
       router.refresh();
     } catch {

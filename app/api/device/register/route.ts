@@ -7,6 +7,7 @@ import {
   setDeviceCookie,
 } from "@/lib/device/device-cookie";
 import { jsonOk, jsonError } from "@/lib/api-response";
+import { isDeviceLimitBypassed } from "@/lib/device/device-limit-config";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +20,15 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return jsonError("UNAUTHENTICATED", "Bạn chưa đăng nhập", 401);
     }
+
+    // ── Bypass giới hạn thiết bị trong môi trường development ──────────────
+    // Chỉ bật khi NODE_ENV !== "production" VÀ DISABLE_DEVICE_LIMIT === "true"
+    // Auth vẫn bắt buộc (kiểm tra ở trên rồi mới tới đây).
+    if (isDeviceLimitBypassed()) {
+      console.info("[Device Limit] Bypassed in local development (register)");
+      return jsonOk({ code: "DEVICE_BYPASSED" });
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const userAgent = request.headers.get("user-agent") || "";
     let rawToken = await getDeviceCookieToken();

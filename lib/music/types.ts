@@ -1,63 +1,60 @@
-// Types for the study music feature
+// Types for the MP3 study music feature
 
-export type PlayerState = "idle" | "loading" | "playing" | "paused" | "error";
+export type PlaybackState = "idle" | "loading" | "playing" | "paused" | "error";
 
-export type CornerPosition =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type RepeatMode = "off" | "one" | "all";
 
-export type ParsedMusicSource =
-  | {
-      provider: "youtube";
-      kind: "video";
-      videoId: string;
-    }
-  | {
-      provider: "youtube";
-      kind: "playlist";
-      playlistId: string;
-    }
-  | {
-      provider: "soundcloud";
-      kind: "track";
-      url: string; // validated, original URL for Widget API
-    };
-
-export interface RecentLink {
-  url: string;
-  provider: "youtube" | "soundcloud";
-  label: string; // shortened display name
-  addedAt: number; // timestamp
+export interface StudyTrack {
+  id: string;
+  title: string;
+  artist: string;
+  category: string;
+  src: string; // mapped from DB audio_url
+  durationLabel: string;
+  sortOrder: number;
+  isActive?: boolean;
 }
 
-export interface MusicContextValue {
-  currentUrl: string | null;
-  currentSource: ParsedMusicSource | null;
-  playerState: PlayerState;
+export interface StudyMusicContextValue {
+  tracks: StudyTrack[];
+  currentTrack: StudyTrack | null;
+  playbackState: PlaybackState;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isMuted: boolean;
+  repeatMode: RepeatMode;
   isPanelOpen: boolean;
-  recentLinks: RecentLink[];
   errorMessage: string;
+  isLoadingTracks: boolean;
   // Actions
-  playUrl: (url: string) => void;
+  playTrack: (track: StudyTrack) => void;
+  togglePlayPause: () => void;
+  nextTrack: () => void;
+  prevTrack: () => void;
   stopMusic: () => void;
+  seekTo: (seconds: number) => void;
+  setVolume: (vol: number) => void;
+  toggleMute: () => void;
+  cycleRepeatMode: () => void;
   setPanelOpen: (open: boolean) => void;
-  setPlayerState: (state: PlayerState) => void;
-  setErrorMessage: (msg: string) => void;
-  removeRecent: (url: string) => void;
-  clearHistory: () => void;
+  reloadTracks: () => Promise<void | StudyTrack[]>;
 }
+
+export const MUSIC_CATEGORIES = [
+  "Lo-fi",
+  "Piano",
+  "Âm thanh thiên nhiên",
+  "Nhạc không lời",
+  "Âm thanh nền",
+  "Khác",
+] as const;
 
 export const STORAGE_KEYS = {
-  RECENT_LINKS: "study_music_recent_links",
-  CURRENT_URL: "study_music_current_url",
-  PROVIDER: "study_music_provider",
+  TRACK_ID: "study_music_track_id",
+  VOLUME: "study_music_volume",
+  MUTED: "study_music_muted",
+  REPEAT_MODE: "study_music_repeat_mode",
   PANEL_OPEN: "study_music_panel_open",
-  DESKTOP_CORNER: "study_music_player_desktop_corner",
-  MOBILE_CORNER: "study_music_player_mobile_corner",
-  DESKTOP_POS: "study_music_player_desktop_position",
-  MOBILE_POS: "study_music_player_mobile_position",
+  CURRENT_TIME: "study_music_current_time",
 } as const;
-
-export const MAX_RECENT_LINKS = 5;
