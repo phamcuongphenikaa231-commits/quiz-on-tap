@@ -1,6 +1,5 @@
-import { requireUserForApi } from "@/lib/auth/require-user";
-import { requireDeviceForApi } from "@/lib/device/require-device";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { getDeviceCookieToken, hashDeviceToken } from "@/lib/device/device-cookie";
 import { jsonOk, jsonError } from "@/lib/api-response";
 import { answerSchema } from "@/lib/quiz/validators";
 
@@ -8,17 +7,10 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ attemptId: string }> }
 ) {
+  const startedAt = performance.now();
   try {
     const { attemptId } = await params;
-    const auth = await requireUserForApi();
-    if (!auth) return jsonError("UNAUTHENTICATED", "Bạn chưa đăng nhập", 401);
 
-    const deviceOk = await requireDeviceForApi();
-    if (!deviceOk) {
-      return jsonError("DEVICE_INACTIVE", "Thiết bị không hợp lệ", 403);
-    }
-
-    // Parse and validate body
     let body: unknown;
     try {
       body = await request.json();
@@ -33,104 +25,68 @@ export async function POST(
     }
 
     const { questionId, selectedOptionId } = parsed.data;
-    const admin = createAdminClient();
+    const rawToken = await getDeviceCookieToken();
+    const hash = rawToken ? hashDeviceToken(rawToken) : "";
 
-    // Kiểm tra attempt thuộc user và chưa hoàn tất
-    const { data: attempt } = await admin
-      .from("quiz_attempts")
-      .select("id, user_id, status")
-      .eq("id", attemptId)
-      .single();
+    const supabase = await createClient();
 
-    if (!attempt) {
-      return jsonError("ATTEMPT_NOT_FOUND", "Phiên làm bài không tồn tại", 404);
-    }
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      "submit_quiz_answer_fast",
+      {
+        p_attempt_id: attemptId,
+        p_question_id: questionId,
+        p_selected_option_id: selectedOptionId,
+        p_device_token_hash: hash,
+      }
+    );
 
-    if (attempt.user_id !== auth.user.id) {
-      return jsonError("ATTEMPT_FORBIDDEN", "Phiên làm bài không thuộc về bạn", 403);
-    }
-
-    if (attempt.status === "completed") {
-      return jsonError("ATTEMPT_COMPLETED", "Phiên làm bài đã kết thúc", 400);
-    }
-
-    // Kiểm tra question nằm trong attempt
-    const { data: aq } = await admin
-      .from("attempt_questions")
-      .select("question_id")
-      .eq("attempt_id", attemptId)
-      .eq("question_id", questionId)
-      .single();
-
-    if (!aq) {
-      return jsonError("QUESTION_NOT_IN_ATTEMPT", "Câu hỏi không thuộc phiên làm bài này", 400);
-    }
-
-    // Kiểm tra option thuộc đúng question
-    const { data: selectedOption } = await admin
-      .from("options")
-      .select("id, question_id, is_correct")
-      .eq("id", selectedOptionId)
-      .single();
-
-    if (!selectedOption || selectedOption.question_id !== questionId) {
-      return jsonError("OPTION_NOT_IN_QUESTION", "Lựa chọn không thuộc câu hỏi này", 400);
-    }
-
-    // Kiểm tra chưa trả lời câu này
-    const { data: existingAnswer } = await admin
-      .from("attempt_answers")
-      .select("id")
-      .eq("attempt_id", attemptId)
-      .eq("question_id", questionId)
-      .maybeSingle();
-
-    if (existingAnswer) {
-      return jsonError("ALREADY_ANSWERED", "Câu hỏi này đã được trả lời", 400);
-    }
-
-    // Ghi answer
-    const isCorrect = selectedOption.is_correct;
-    const { error: insertError } = await admin
-      .from("attempt_answers")
-      .insert({
-        attempt_id: attemptId,
-        question_id: questionId,
-        selected_option_id: selectedOptionId,
-        is_correct: isCorrect,
-      });
-
-    if (insertError) {
-      return jsonError("INSERT_ERROR", "Không thể lưu câu trả lời", 500);
-    }
-
-    // Lấy thông tin để trả về (SAU KHI đã trả lời)
-    const { data: question } = await admin
-      .from("questions")
-      .select("general_explanation")
-      .eq("id", questionId)
-      .single();
-
-    const { data: allOptions } = await admin
-      .from("options")
-      .select("id, is_correct, explanation")
-      .eq("question_id", questionId)
-      .order("sort_order");
-
-    const correctOption = (allOptions || []).find((o) => o.is_correct);
-
-    return jsonOk({
-      isCorrect,
-      correctOptionId: correctOption?.id || "",
-      selectedOptionId,
-      generalExplanation: question?.general_explanation || "",
-      options: (allOptions || []).map((o) => ({
-        id: o.id,
-        isCorrect: o.is_correct,
-        explanation: o.explanation,
-      })),
+    console.log({
+      route: "POST /api/attempts/[attemptId]/answer",
+      durationMs: Math.round(performance.now() - startedAt),
     });
+
+    if (rpcError) {
+      return jsonError("RPC_ERROR", rpcError.message || "Lỗi nộp đáp án", 500);
+    }
+
+    const result = rpcResult as {
+      ok: boolean;
+      code?: string;
+      message?: string;
+      data?: {
+        isCorrect: boolean;
+        correctOptionId: string;
+        selectedOptionId: string;
+        generalExplanation: string;
+        options: Array<{
+          id: string;
+          isCorrect: boolean;
+          explanation: string;
+        }>;
+      };
+    };
+
+    if (!result.ok) {
+      const status =
+        result.code === "UNAUTHENTICATED"
+          ? 401
+          : result.code === "DEVICE_INACTIVE" ||
+            result.code === "ACCOUNT_BLOCKED" ||
+            result.code === "ATTEMPT_FORBIDDEN"
+          ? 403
+          : result.code === "ATTEMPT_NOT_FOUND"
+          ? 404
+          : 400;
+
+      return jsonError(result.code || "ANSWER_ERROR", result.message || "Không thể lưu đáp án", status);
+    }
+
+    return jsonOk(result.data);
   } catch {
+    console.log({
+      route: "POST /api/attempts/[attemptId]/answer",
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return jsonError("INTERNAL_ERROR", "Lỗi hệ thống", 500);
   }
 }

@@ -1,152 +1,108 @@
-import { requireUserForApi } from "@/lib/auth/require-user";
-import { requireDeviceForApi } from "@/lib/device/require-device";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { getDeviceCookieToken, hashDeviceToken } from "@/lib/device/device-cookie";
 import { jsonOk, jsonError } from "@/lib/api-response";
+import { z } from "zod";
+
+const startSchema = z.object({
+  forceNew: z.boolean().optional().default(false),
+});
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ quizId: string }> }
 ) {
+  const startedAt = performance.now();
   try {
     const { quizId } = await params;
-    const auth = await requireUserForApi();
-    if (!auth) return jsonError("UNAUTHENTICATED", "Bạn chưa đăng nhập", 401);
+    let forceNew = false;
 
-    if (auth.profile.status === "blocked") {
-      return jsonError("ACCOUNT_BLOCKED", "Tài khoản đang bị khóa", 403);
-    }
-
-    const deviceOk = await requireDeviceForApi();
-    if (!deviceOk) {
-      return jsonError("DEVICE_INACTIVE", "Thiết bị không hợp lệ", 403);
-    }
-
-    const admin = createAdminClient();
-
-    // Lấy quiz info
-    const { data: quiz, error: quizError } = await admin
-      .from("quizzes")
-      .select("id, subject_id, section_id, question_limit, shuffle_questions, shuffle_options, is_published")
-      .eq("id", quizId)
-      .single();
-
-    if (quizError || !quiz) {
-      return jsonError("QUIZ_NOT_FOUND", "Quiz không tồn tại", 404);
-    }
-
-    if (!quiz.is_published) {
-      return jsonError("QUIZ_NOT_PUBLISHED", "Quiz chưa được xuất bản", 403);
-    }
-
-    // Kiểm tra quyền truy cập môn
-    const { data: access } = await auth.supabase
-      .from("user_subjects")
-      .select("is_active")
-      .eq("user_id", auth.user.id)
-      .eq("subject_id", quiz.subject_id)
-      .eq("is_active", true)
-      .single();
-
-    if (!access) {
-      return jsonError("NO_SUBJECT_ACCESS", "Bạn chưa được cấp quyền môn này", 403);
-    }
-
-    // Lấy câu hỏi active
-    let questionsQuery = admin
-      .from("questions")
-      .select("id, sort_order")
-      .eq("quiz_id", quizId)
-      .eq("is_active", true);
-
-    if (quiz.shuffle_questions) {
-      // Random order - lấy tất cả rồi shuffle
-      const { data: allQuestions } = await questionsQuery;
-      if (!allQuestions || allQuestions.length === 0) {
-        return jsonError("NO_QUESTIONS", "Quiz chưa có câu hỏi", 400);
+    // Read and parse optional body
+    try {
+      const text = await request.text();
+      if (text && text.trim().length > 0) {
+        const json = JSON.parse(text);
+        const parsed = startSchema.safeParse(json);
+        if (parsed.success) {
+          forceNew = parsed.data.forceNew;
+        }
       }
-
-      // Shuffle
-      const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, quiz.question_limit);
-
-      return await createAttempt(admin, auth.user.id, quizId, selected, quiz.shuffle_options);
-    } else {
-      questionsQuery = questionsQuery.order("sort_order").limit(quiz.question_limit);
-      const { data: questions } = await questionsQuery;
-
-      if (!questions || questions.length === 0) {
-        return jsonError("NO_QUESTIONS", "Quiz chưa có câu hỏi", 400);
-      }
-
-      return await createAttempt(admin, auth.user.id, quizId, questions, quiz.shuffle_options);
+    } catch {
+      // If parsing fails or body empty, default forceNew to false
+      forceNew = false;
     }
+
+    const rawToken = await getDeviceCookieToken();
+    const hash = rawToken ? hashDeviceToken(rawToken) : "";
+
+    const supabase = await createClient();
+
+    // Call fast RPC with forceNew flag
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      "start_quiz_attempt_fast",
+      {
+        p_quiz_id: quizId,
+        p_device_token_hash: hash,
+        p_force_new: forceNew,
+      }
+    );
+
+    console.log({
+      route: "POST /api/quizzes/[quizId]/start",
+      forceNew,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+
+    if (rpcError) {
+      console.error("Restart quiz RPC error", {
+        code: rpcError.code,
+        message: rpcError.message,
+        details: (rpcError as { details?: string }).details,
+        hint: (rpcError as { hint?: string }).hint,
+      });
+      return jsonError("RPC_ERROR", rpcError.message || "Lỗi khởi tạo bài làm", 500);
+    }
+
+    const result = rpcResult as {
+      ok: boolean;
+      code?: string;
+      message?: string;
+      data?: {
+        attemptId: string;
+        total: number;
+        totalQuestions: number;
+        questions: Array<{
+          position: number;
+          questionId: string;
+          questionText: string;
+          options: Array<{ id: string; text: string }>;
+          answered?: boolean;
+          selectedOptionId?: string | null;
+        }>;
+      };
+    };
+
+    if (!result.ok) {
+      const status =
+        result.code === "UNAUTHENTICATED"
+          ? 401
+          : result.code === "DEVICE_INACTIVE" ||
+            result.code === "ACCOUNT_BLOCKED" ||
+            result.code === "NO_SUBJECT_ACCESS" ||
+            result.code === "QUIZ_NOT_PUBLISHED"
+          ? 403
+          : result.code === "QUIZ_NOT_FOUND"
+          ? 404
+          : 400;
+
+      return jsonError(result.code || "START_ERROR", result.message || "Không thể bắt đầu quiz", status);
+    }
+
+    return jsonOk(result.data);
   } catch {
+    console.log({
+      route: "POST /api/quizzes/[quizId]/start",
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return jsonError("INTERNAL_ERROR", "Lỗi hệ thống", 500);
   }
-}
-
-async function createAttempt(
-  admin: ReturnType<typeof createAdminClient>,
-  userId: string,
-  quizId: string,
-  questions: { id: string }[],
-  shuffleOptions: boolean
-) {
-  // Tạo attempt
-  const { data: attempt, error: attemptError } = await admin
-    .from("quiz_attempts")
-    .insert({
-      user_id: userId,
-      quiz_id: quizId,
-      total_questions: questions.length,
-      status: "in_progress",
-    })
-    .select("id")
-    .single();
-
-  if (attemptError || !attempt) {
-    return jsonError("CREATE_ATTEMPT_ERROR", "Không thể tạo phiên làm bài", 500);
-  }
-
-  // Tạo attempt_questions với thứ tự option
-  const attemptQuestions = [];
-
-  for (let i = 0; i < questions.length; i++) {
-    const question = questions[i];
-
-    // Lấy options cho câu hỏi
-    const { data: options } = await admin
-      .from("options")
-      .select("id")
-      .eq("question_id", question.id)
-      .order("sort_order");
-
-    let optionIds = (options || []).map((o) => o.id);
-
-    if (shuffleOptions) {
-      optionIds = optionIds.sort(() => Math.random() - 0.5);
-    }
-
-    attemptQuestions.push({
-      attempt_id: attempt.id,
-      question_id: question.id,
-      position: i + 1,
-      option_order: optionIds,
-    });
-  }
-
-  const { error: aqError } = await admin
-    .from("attempt_questions")
-    .insert(attemptQuestions);
-
-  if (aqError) {
-    // Rollback: delete attempt
-    await admin.from("quiz_attempts").delete().eq("id", attempt.id);
-    return jsonError("CREATE_QUESTIONS_ERROR", "Không thể tạo câu hỏi", 500);
-  }
-
-  return jsonOk({
-    attemptId: attempt.id,
-    totalQuestions: questions.length,
-  });
 }

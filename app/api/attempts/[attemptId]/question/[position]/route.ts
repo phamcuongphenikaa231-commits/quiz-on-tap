@@ -7,6 +7,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ attemptId: string; position: string }> }
 ) {
+  const startedAt = performance.now();
   try {
     const { attemptId, position: posStr } = await params;
     const position = parseInt(posStr, 10);
@@ -90,6 +91,11 @@ export async function GET(
       .eq("question_id", aq.question_id)
       .maybeSingle();
 
+    console.log({
+      route: "GET /api/attempts/[attemptId]/question/[position]",
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+
     return jsonOk({
       attemptId,
       position,
@@ -100,6 +106,10 @@ export async function GET(
       answered: !!existingAnswer,
     });
   } catch {
+    console.log({
+      route: "GET /api/attempts/[attemptId]/question/[position]",
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return jsonError("INTERNAL_ERROR", "Lỗi hệ thống", 500);
   }
 }

@@ -4,6 +4,8 @@ import { SectionTree } from "@/components/section-tree";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { unstable_cache } from "next/cache";
+import { MusicTopbarButton } from "@/components/music/music-topbar-button";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +45,6 @@ function buildSectionTree(
 ): Section[] {
   const sectionMap = new Map<string, Section>();
 
-  // Create section nodes
   for (const s of sections) {
     sectionMap.set(s.id, {
       id: s.id,
@@ -55,7 +56,6 @@ function buildSectionTree(
     });
   }
 
-  // Attach quizzes to sections
   for (const q of quizzes) {
     const section = sectionMap.get(q.section_id);
     if (section) {
@@ -67,7 +67,6 @@ function buildSectionTree(
     }
   }
 
-  // Sort quizzes within sections
   for (const section of sectionMap.values()) {
     section.quizzes.sort((a, b) => {
       const qa = quizzes.find((q) => q.id === a.id);
@@ -76,7 +75,6 @@ function buildSectionTree(
     });
   }
 
-  // Build tree
   const roots: Section[] = [];
   for (const section of sectionMap.values()) {
     if (section.parent_id && sectionMap.has(section.parent_id)) {
@@ -86,7 +84,6 @@ function buildSectionTree(
     }
   }
 
-  // Sort children recursively
   function sortChildren(nodes: Section[]) {
     nodes.sort((a, b) => a.sort_order - b.sort_order);
     for (const node of nodes) {
@@ -98,16 +95,74 @@ function buildSectionTree(
   return roots;
 }
 
+/**
+  * Cache subject structure (sections, quizzes, question counts) by subjectId.
+  * Avoids repetitive database hits for static course structures.
+  */
+const getSubjectTreeCached = (subjectId: string) =>
+  unstable_cache(
+    async () => {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const adminClient = createAdminClient();
+
+      const [sectionsRes, quizzesRes] = await Promise.all([
+        adminClient
+          .from("sections")
+          .select("id, title, parent_id, sort_order")
+          .eq("subject_id", subjectId)
+          .eq("is_published", true)
+          .order("sort_order"),
+        adminClient
+          .from("quizzes")
+          .select("id, title, section_id, sort_order")
+          .eq("subject_id", subjectId)
+          .eq("is_published", true)
+          .order("sort_order"),
+      ]);
+
+      const sections = sectionsRes.data || [];
+      const quizzes = quizzesRes.data || [];
+
+      // Single grouped question count query instead of N+1 loop
+      const questionCounts: Record<string, number> = {};
+      const quizIds = quizzes.map((q) => q.id);
+
+      if (quizIds.length > 0) {
+        const { data: qRows } = await adminClient
+          .from("questions")
+          .select("quiz_id")
+          .in("quiz_id", quizIds)
+          .eq("is_active", true);
+
+        for (const row of qRows || []) {
+          questionCounts[row.quiz_id] = (questionCounts[row.quiz_id] || 0) + 1;
+        }
+      }
+
+      return buildSectionTree(
+        sections as SectionRow[],
+        quizzes as QuizRow[],
+        questionCounts
+      );
+    },
+    [`subject-tree-${subjectId}`],
+    {
+      revalidate: 60,
+      tags: [`subject-${subjectId}`],
+    }
+  )();
+
 export default async function SubjectPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  const startedAt = performance.now();
   const { slug } = await params;
   const { user, supabase } = await requireUser();
   await requireDevice();
 
-  // Kiểm tra quyền truy cập môn
+  // Parallel fetch subject & access check
   const { data: subject } = await supabase
     .from("subjects")
     .select("id, title, slug, description")
@@ -119,7 +174,6 @@ export default async function SubjectPage({
     notFound();
   }
 
-  // Kiểm tra user_subjects
   const { data: access } = await supabase
     .from("user_subjects")
     .select("is_active")
@@ -132,59 +186,28 @@ export default async function SubjectPage({
     notFound();
   }
 
-  // Lấy sections
-  const { data: sections } = await supabase
-    .from("sections")
-    .select("id, title, parent_id, sort_order")
-    .eq("subject_id", subject.id)
-    .eq("is_published", true)
-    .order("sort_order");
+  const tree = await getSubjectTreeCached(subject.id);
 
-  // Lấy quizzes
-  const { data: quizzes } = await supabase
-    .from("quizzes")
-    .select("id, title, section_id, sort_order")
-    .eq("subject_id", subject.id)
-    .eq("is_published", true)
-    .order("sort_order");
-
-  // Đếm câu hỏi cho mỗi quiz (dùng admin client vì questions bị RLS chặn student)
-  // Sử dụng count qua relationship
-  const questionCounts: Record<string, number> = {};
-  if (quizzes && quizzes.length > 0) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const adminClient = createAdminClient();
-
-    for (const quiz of quizzes) {
-      const { count } = await adminClient
-        .from("questions")
-        .select("id", { count: "exact", head: true })
-        .eq("quiz_id", quiz.id)
-        .eq("is_active", true);
-      questionCounts[quiz.id] = count || 0;
-    }
-  }
-
-  const tree = buildSectionTree(
-    (sections || []) as SectionRow[],
-    (quizzes || []) as QuizRow[],
-    questionCounts
-  );
+  console.log({
+    route: `/mon/${slug}`,
+    durationMs: Math.round(performance.now() - startedAt),
+  });
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b bg-card/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
+      <header data-floating-obstacle="topbar" className="sticky top-0 z-40 border-b bg-card/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <Link
             href="/dashboard"
-            className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Quay lại</span>
           </Link>
-          <h1 className="font-semibold text-foreground truncate">
+          <h1 className="flex-1 min-w-0 font-semibold text-foreground truncate">
             {subject.title}
           </h1>
+          <MusicTopbarButton />
         </div>
       </header>
 

@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { QuizPlayer } from "@/components/quiz-player";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import type { QuizQuestionItem } from "@/lib/quiz/types";
 
 interface QuizPageClientProps {
   quizId: string;
@@ -14,6 +15,7 @@ interface QuizPageClientProps {
 export default function QuizPageClient({ quizId, subjectSlug }: QuizPageClientProps) {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [totalQuestions, setTotalQuestions] = useState(0);
+  const [questions, setQuestions] = useState<QuizQuestionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -40,8 +42,10 @@ export default function QuizPageClient({ quizId, subjectSlug }: QuizPageClientPr
           return;
         }
 
-        setAttemptId(data.data.attemptId);
-        setTotalQuestions(data.data.totalQuestions);
+        const attemptData = data.data;
+        setAttemptId(attemptData.attemptId);
+        setTotalQuestions(attemptData.totalQuestions || attemptData.total);
+        setQuestions(attemptData.questions || []);
       } catch {
         setError("Mất kết nối. Vui lòng thử lại.");
       } finally {
@@ -51,6 +55,12 @@ export default function QuizPageClient({ quizId, subjectSlug }: QuizPageClientPr
 
     startQuiz();
   }, [quizId, router]);
+
+  function handleRestartAttempt(newAttemptId: string, newTotal: number, newQuestions: QuizQuestionItem[]) {
+    setAttemptId(newAttemptId);
+    setTotalQuestions(newTotal);
+    setQuestions(newQuestions);
+  }
 
   if (loading) {
     return (
@@ -87,27 +97,18 @@ export default function QuizPageClient({ quizId, subjectSlug }: QuizPageClientPr
     );
   }
 
-  if (!attemptId) return null;
+  if (!attemptId || questions.length === 0) return null;
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b bg-card/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-2xl items-center px-4 py-3">
-          <Link
-            href={`/mon/${subjectSlug}`}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Quay lại</span>
-          </Link>
-        </div>
-      </header>
-
       <QuizPlayer
+        key={attemptId}
         attemptId={attemptId}
         totalQuestions={totalQuestions}
+        initialQuestions={questions}
         quizId={quizId}
         subjectSlug={subjectSlug}
+        onRestartAttempt={handleRestartAttempt}
       />
     </div>
   );

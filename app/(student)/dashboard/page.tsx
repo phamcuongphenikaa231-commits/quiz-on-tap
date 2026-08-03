@@ -2,26 +2,37 @@ import { requireUser } from "@/lib/auth/require-user";
 import { requireDevice } from "@/lib/device/require-device";
 import { SubjectCard } from "@/components/subject-card";
 import { LogOut, GraduationCap } from "lucide-react";
+import { MusicTopbarButton } from "@/components/music/music-topbar-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const startedAt = performance.now();
   const { user, supabase } = await requireUser();
   await requireDevice();
 
-  // Lấy profile
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, role")
-    .eq("id", user.id)
-    .single();
+  // Run profile and user_subjects queries in parallel using Promise.all
+  const [profileRes, subjectsRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, role")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("user_subjects")
+      .select("subject_id, subjects!inner(id, title, slug, description)")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .eq("subjects.is_published", true),
+  ]);
 
-  // Lấy danh sách môn được cấp (published + active)
-  const { data: userSubjects } = await supabase
-    .from("user_subjects")
-    .select("subject_id, subjects(id, title, slug, description)")
-    .eq("user_id", user.id)
-    .eq("is_active", true);
+  const profile = profileRes.data;
+  const userSubjects = subjectsRes.data;
+
+  console.log({
+    route: "/dashboard",
+    durationMs: Math.round(performance.now() - startedAt),
+  });
 
   const subjects = (userSubjects || [])
     .map((us) => {
@@ -40,13 +51,15 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-card/80 backdrop-blur-sm">
+      <header data-floating-obstacle="topbar" className="sticky top-0 z-40 border-b bg-card/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <GraduationCap className="h-5 w-5 text-primary" />
             <span className="font-semibold text-foreground">Quiz Ôn Tập</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Music button */}
+            <MusicTopbarButton />
             {isAdmin && (
               <a
                 href="/admin"

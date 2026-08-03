@@ -12,6 +12,7 @@ export function SupportButton() {
       href={SUPPORT_URL}
       target="_blank"
       rel="noopener noreferrer"
+      data-floating-obstacle="support"
       className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-primary-foreground shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95 sm:px-5"
       aria-label="Liên hệ hỗ trợ"
     >

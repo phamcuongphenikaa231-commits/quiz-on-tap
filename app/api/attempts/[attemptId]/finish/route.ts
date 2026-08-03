@@ -1,81 +1,68 @@
-import { requireUserForApi } from "@/lib/auth/require-user";
-import { requireDeviceForApi } from "@/lib/device/require-device";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { getDeviceCookieToken, hashDeviceToken } from "@/lib/device/device-cookie";
 import { jsonOk, jsonError } from "@/lib/api-response";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ attemptId: string }> }
 ) {
+  const startedAt = performance.now();
   try {
     const { attemptId } = await params;
-    const auth = await requireUserForApi();
-    if (!auth) return jsonError("UNAUTHENTICATED", "Bạn chưa đăng nhập", 401);
+    const rawToken = await getDeviceCookieToken();
+    const hash = rawToken ? hashDeviceToken(rawToken) : "";
 
-    const deviceOk = await requireDeviceForApi();
-    if (!deviceOk) {
-      return jsonError("DEVICE_INACTIVE", "Thiết bị không hợp lệ", 403);
-    }
+    const supabase = await createClient();
 
-    const admin = createAdminClient();
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      "finish_quiz_attempt_fast",
+      {
+        p_attempt_id: attemptId,
+        p_device_token_hash: hash,
+      }
+    );
 
-    // Kiểm tra attempt thuộc user
-    const { data: attempt } = await admin
-      .from("quiz_attempts")
-      .select("id, user_id, status, total_questions")
-      .eq("id", attemptId)
-      .single();
-
-    if (!attempt) {
-      return jsonError("ATTEMPT_NOT_FOUND", "Phiên làm bài không tồn tại", 404);
-    }
-
-    if (attempt.user_id !== auth.user.id) {
-      return jsonError("ATTEMPT_FORBIDDEN", "Phiên làm bài không thuộc về bạn", 403);
-    }
-
-    if (attempt.status === "completed") {
-      // Trả lại kết quả nếu đã hoàn tất
-      return jsonOk({
-        totalQuestions: attempt.total_questions,
-        correctCount: 0,
-        score: 0,
-      });
-    }
-
-    // Tính điểm từ database (KHÔNG nhận từ client)
-    const { data: answers } = await admin
-      .from("attempt_answers")
-      .select("is_correct")
-      .eq("attempt_id", attemptId);
-
-    const correctCount = (answers || []).filter((a) => a.is_correct).length;
-    const score =
-      attempt.total_questions > 0
-        ? Math.round((correctCount / attempt.total_questions) * 10000) / 100
-        : 0;
-
-    // Cập nhật attempt
-    const { error: updateError } = await admin
-      .from("quiz_attempts")
-      .update({
-        status: "completed",
-        correct_count: correctCount,
-        score,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", attemptId);
-
-    if (updateError) {
-      return jsonError("UPDATE_ERROR", "Không thể cập nhật kết quả", 500);
-    }
-
-    return jsonOk({
-      totalQuestions: attempt.total_questions,
-      correctCount,
-      score,
+    console.log({
+      route: "POST /api/attempts/[attemptId]/finish",
+      durationMs: Math.round(performance.now() - startedAt),
     });
+
+    if (rpcError) {
+      return jsonError("RPC_ERROR", rpcError.message || "Lỗi hoàn tất bài làm", 500);
+    }
+
+    const result = rpcResult as {
+      ok: boolean;
+      code?: string;
+      message?: string;
+      data?: {
+        totalQuestions: number;
+        correctCount: number;
+        score: number;
+      };
+    };
+
+    if (!result.ok) {
+      const status =
+        result.code === "UNAUTHENTICATED"
+          ? 401
+          : result.code === "DEVICE_INACTIVE" ||
+            result.code === "ACCOUNT_BLOCKED" ||
+            result.code === "ATTEMPT_FORBIDDEN"
+          ? 403
+          : result.code === "ATTEMPT_NOT_FOUND"
+          ? 404
+          : 400;
+
+      return jsonError(result.code || "FINISH_ERROR", result.message || "Không thể hoàn tất bài làm", status);
+    }
+
+    return jsonOk(result.data);
   } catch {
+    console.log({
+      route: "POST /api/attempts/[attemptId]/finish",
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return jsonError("INTERNAL_ERROR", "Lỗi hệ thống", 500);
   }
 }
