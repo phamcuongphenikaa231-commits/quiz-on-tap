@@ -52,7 +52,7 @@ interface ImportFileFormProps {
 const SAMPLE_JSON_ARRAY = [
   {
     questionText: "Thủ đô của Việt Nam là thành phố nào?",
-    generalExplanation: "Hà Nội là thủ đô chính thức của Việt Nam.",
+    hint: "Thành phố này nằm ở miền Bắc Việt Nam.",
     sortOrder: 1,
     options: [
       {
@@ -318,7 +318,7 @@ export function ImportFileForm({
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
-                Dán mảng JSON chứa các câu hỏi theo đúng định dạng
+                Dán mảng JSON hệ thống hoặc file xuất từ NotebookLM ({`{ "questions": [...] }`})
               </span>
               <button
                 type="button"
@@ -333,7 +333,7 @@ export function ImportFileForm({
               rows={12}
               value={jsonText}
               onChange={(e) => onChangeJsonText(e.target.value)}
-              placeholder="[\n  {\n    'questionText': 'Nội dung câu hỏi?',\n    'generalExplanation': 'Lời giải thích chung...'\n  }\n]"
+              placeholder="[\n  {\n    'questionText': 'Nội dung câu hỏi?',\n    'hint': 'Gợi ý suy luận...'\n  }\n] hoac NotebookLM JSON format"
               className="w-full rounded-lg border bg-slate-950 p-3 text-xs font-mono text-slate-50 outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>

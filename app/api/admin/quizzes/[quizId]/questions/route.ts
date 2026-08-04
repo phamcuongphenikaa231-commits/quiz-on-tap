@@ -24,7 +24,7 @@ export async function GET(
       id,
       quiz_id,
       question_text,
-      general_explanation,
+      hint,
       sort_order,
       created_at,
       options (

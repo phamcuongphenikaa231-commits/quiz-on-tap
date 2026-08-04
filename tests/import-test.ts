@@ -6,6 +6,7 @@
 import { parseExcelFile } from "../lib/import/excel-parser";
 import { normalizeRow } from "../lib/import/normalize-row";
 import { questionArraySchema } from "../lib/import/question-schema";
+import { parseAndNormalizeJson } from "../lib/import/notebooklm-parser";
 import * as XLSX from "xlsx";
 
 function runTests() {
@@ -26,7 +27,7 @@ function runTests() {
   // Test 1: Valid 5 questions array validation
   const valid5Questions = Array.from({ length: 5 }, (_, i) => ({
     questionText: `Câu hỏi thử nghiệm ${i + 1}\nCó xuống dòng`,
-    generalExplanation: `Giải thích chung câu ${i + 1}`,
+    hint: `Gợi ý câu ${i + 1}`,
     sortOrder: i + 1,
     options: [
       { text: "Đáp án A", isCorrect: false, explanation: "Giải thích A", sortOrder: 1 },
@@ -142,6 +143,58 @@ function runTests() {
       res6.questions[0].questionText.includes("\n") &&
       res6.questions[0].options[1].isCorrect === true,
     "Test 6: Excel file parsing preserves Vietnamese Unicode, line breaks & lowercase 'b' answer"
+  );
+
+  // Test 7: NotebookLM JSON direct import & correctAnswer mismatch detection
+  const notebookLmValid = {
+    title: "Test NotebookLM",
+    totalQuestions: 1,
+    questions: [
+      {
+        number: 1,
+        question: "Câu hỏi NotebookLM?",
+        hint: "Gợi ý NotebookLM",
+        correctAnswer: "B",
+        options: [
+          { label: "A", text: "Opt A", isCorrect: false, rationale: "Rat A" },
+          { label: "B", text: "Opt B", isCorrect: true, rationale: "Rat B" },
+          { label: "C", text: "Opt C", isCorrect: false, rationale: "Rat C" },
+          { label: "D", text: "Opt D", isCorrect: false, rationale: "Rat D" },
+        ],
+      },
+    ],
+  };
+
+  const res7a = parseAndNormalizeJson(notebookLmValid);
+  assert(
+    res7a.ok &&
+      res7a.formatDetected === "NotebookLM JSON" &&
+      res7a.questions?.[0].hint === "Gợi ý NotebookLM" &&
+      res7a.questions?.[0].options[1].explanation === "Rat B",
+    "Test 7a: NotebookLM JSON format correctly detected and mapped with hint & rationale"
+  );
+
+  const notebookLmMismatch = {
+    questions: [
+      {
+        number: 1,
+        question: "Câu hỏi sai lệch?",
+        hint: "Gợi ý",
+        correctAnswer: "A", // mismatch! isCorrect is on B
+        options: [
+          { label: "A", text: "Opt A", isCorrect: false, rationale: "Rat A" },
+          { label: "B", text: "Opt B", isCorrect: true, rationale: "Rat B" },
+          { label: "C", text: "Opt C", isCorrect: false, rationale: "Rat C" },
+          { label: "D", text: "Opt D", isCorrect: false, rationale: "Rat D" },
+        ],
+      },
+    ],
+  };
+
+  const res7b = parseAndNormalizeJson(notebookLmMismatch);
+  assert(
+    !res7b.ok && (res7b.errors?.length ?? 0) > 0,
+    "Test 7b: NotebookLM JSON with correctAnswer mismatch correctly rejected"
   );
 
   console.log(`\nVerification Summary: ${passed} PASSED, ${failed} FAILED`);

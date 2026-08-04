@@ -23,7 +23,7 @@ export async function PATCH(
       return jsonError("VALIDATION_ERROR", issues.join("; "), 400);
     }
 
-    const { questionText, generalExplanation, sortOrder, options } = parseResult.data;
+    const { questionText, hint, sortOrder, options } = parseResult.data;
     const admin = createAdminClient();
 
     // Update question
@@ -31,7 +31,7 @@ export async function PATCH(
       .from("questions")
       .update({
         question_text: questionText,
-        general_explanation: generalExplanation,
+        hint: hint || "",
         sort_order: sortOrder,
       })
       .eq("id", questionId);

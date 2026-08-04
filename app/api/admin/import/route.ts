@@ -140,7 +140,7 @@ export async function POST(request: Request) {
         .insert({
           quiz_id: quiz.id,
           question_text: q.questionText,
-          general_explanation: q.generalExplanation,
+          hint: q.hint || "",
           sort_order: q.sortOrder ?? qIdx + 1,
           is_active: true,
         })

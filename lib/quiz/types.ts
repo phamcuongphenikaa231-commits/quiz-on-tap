@@ -7,6 +7,7 @@ export interface QuizQuestionItem {
   position: number;
   questionId: string;
   questionText: string;
+  hint: string;
   options: QuizOption[];
   answered?: boolean;
   selectedOptionId?: string | null;
@@ -14,13 +15,15 @@ export interface QuizQuestionItem {
 
 // Backwards compatibility alias
 export interface QuizQuestion {
-  attemptId: string;
   position: number;
-  total: number;
   questionId: string;
   questionText: string;
+  hint: string;
   options: QuizOption[];
   answered: boolean;
+  selectedOptionId?: string | null;
+  attemptId?: string;
+  total?: number;
 }
 
 export interface AnswerOptionResult {
@@ -33,7 +36,6 @@ export interface AnswerResult {
   isCorrect: boolean;
   correctOptionId: string;
   selectedOptionId: string;
-  generalExplanation: string;
   options: AnswerOptionResult[];
 }
 
@@ -49,3 +51,4 @@ export interface StartQuizResponse {
   totalQuestions: number;
   questions: QuizQuestionItem[];
 }
+

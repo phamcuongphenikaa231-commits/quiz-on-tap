@@ -10,7 +10,8 @@ export const optionSchema = z.object({
 export const questionSchema = z
   .object({
     questionText: z.string().trim().min(1, "Nội dung câu hỏi không được để trống"),
-    generalExplanation: z.string().trim().min(1, "Lời giải thích chung không được để trống"),
+    hint: z.string().trim().default(""),
+    generalExplanation: z.string().trim().optional(),
     sortOrder: z.number().int().positive().optional(),
     options: z
       .array(optionSchema)

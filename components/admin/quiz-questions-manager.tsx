@@ -15,7 +15,7 @@ export interface QuestionRecord {
   id: string;
   quiz_id: string;
   question_text: string;
-  general_explanation: string;
+  hint?: string;
   sort_order: number;
   options: QuestionOption[];
 }
@@ -40,7 +40,7 @@ export function QuizQuestionsManager({
 
   // Form edit states
   const [editQuestionText, setEditQuestionText] = useState("");
-  const [editGeneralExplanation, setEditGeneralExplanation] = useState("");
+  const [editHint, setEditHint] = useState("");
   const [editSortOrder, setEditSortOrder] = useState<number>(1);
   const [editOptions, setEditOptions] = useState<
     Array<{ text: string; explanation: string; isCorrect: boolean }>
@@ -75,7 +75,7 @@ export function QuizQuestionsManager({
   function openEditModal(q: QuestionRecord) {
     setEditingQuestion(q);
     setEditQuestionText(q.question_text);
-    setEditGeneralExplanation(q.general_explanation);
+    setEditHint(q.hint || "");
     setEditSortOrder(q.sort_order);
 
     const sortedOpts = [...(q.options || [])].sort((a, b) => a.sort_order - b.sort_order);
@@ -105,7 +105,7 @@ export function QuizQuestionsManager({
     try {
       const payload = {
         questionText: editQuestionText,
-        generalExplanation: editGeneralExplanation,
+        hint: editHint,
         sortOrder: editSortOrder,
         options: editOptions.map((opt, idx) => ({
           text: opt.text,
@@ -284,13 +284,14 @@ export function QuizQuestionsManager({
 
               <div>
                 <label className="block text-xs font-semibold text-foreground mb-1">
-                  Lời giải thích chung
+                  Gợi ý (Hint)
                 </label>
                 <textarea
                   rows={2}
-                  required
-                  value={editGeneralExplanation}
-                  onChange={(e) => setEditGeneralExplanation(e.target.value)}
+                  maxLength={1000}
+                  placeholder="Nhập một gợi ý giúp người học suy luận nhưng không tiết lộ trực tiếp đáp án..."
+                  value={editHint}
+                  onChange={(e) => setEditHint(e.target.value)}
                   className="w-full rounded-lg border bg-background px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>

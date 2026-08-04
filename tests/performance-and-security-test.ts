@@ -11,9 +11,9 @@ function runVerification() {
   let allPassed = true;
 
   // 1. Verify SQL RPC file exists and does NOT expose answer/explanation in start_quiz_attempt_fast
-  const sqlPath = path.join(process.cwd(), "supabase", "performance_quiz_rpc.sql");
+  const sqlPath = path.join(process.cwd(), "supabase", "add_question_hint.sql");
   if (!fs.existsSync(sqlPath)) {
-    console.error("FAIL: performance_quiz_rpc.sql missing!");
+    console.error("FAIL: add_question_hint.sql missing!");
     allPassed = false;
   } else {
     const sqlContent = fs.readFileSync(sqlPath, "utf-8");

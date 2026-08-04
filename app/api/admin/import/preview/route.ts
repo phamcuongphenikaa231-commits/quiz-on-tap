@@ -2,7 +2,7 @@ import { requireAdminForApi } from "@/lib/auth/require-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { jsonOk, jsonError } from "@/lib/api-response";
 import { parseExcelFile } from "@/lib/import/excel-parser";
-import { questionArraySchema, questionSchema } from "@/lib/import/question-schema";
+import { parseAndNormalizeJson } from "@/lib/import/notebooklm-parser";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     .single();
 
   if (quizError || !quiz) {
-    return jsonError("QUIZ_NOT_FOUND", "Không tìm thấy quiz được chọn trong hệ thống", 4404);
+    return jsonError("QUIZ_NOT_FOUND", "Không tìm thấy quiz được chọn trong hệ thống", 404);
   }
 
   const existingCount = Array.isArray(quiz.questions)
@@ -109,6 +109,7 @@ export async function POST(request: Request) {
         title: quiz.title,
         existingQuestionCount: existingCount,
       },
+      formatDetected: "Excel / CSV File",
       questions: parseResult.questions,
       total: parseResult.questions?.length || 0,
     });
@@ -120,50 +121,13 @@ export async function POST(request: Request) {
       });
     }
 
-    // Validate array or single array
-    const parseResult = questionArraySchema.safeParse(questionsInput);
+    const parseResult = parseAndNormalizeJson(questionsInput);
 
-    if (!parseResult.success) {
-      const errors = parseResult.error.issues.map((issue) => {
-        let rowIndex = 0;
-        if (typeof issue.path[0] === "number") {
-          rowIndex = issue.path[0] + 1; // 1-indexed item number in array
-        }
-        const fieldStr = issue.path.slice(1).join(".") || issue.path.join(".");
-        return {
-          row: rowIndex,
-          field: fieldStr || "questions",
-          message: issue.message,
-        };
-      });
-
+    if (!parseResult.ok) {
       return jsonOk({
         ok: false,
-        errors,
-      });
-    }
-
-    // Additional check: individual question validation for precise errors
-    const validQuestions = parseResult.data;
-    const errors: Array<{ row: number; field: string; message: string }> = [];
-
-    validQuestions.forEach((q, idx) => {
-      const singleCheck = questionSchema.safeParse(q);
-      if (!singleCheck.success) {
-        singleCheck.error.issues.forEach((issue) => {
-          errors.push({
-            row: idx + 1,
-            field: issue.path.join("."),
-            message: issue.message,
-          });
-        });
-      }
-    });
-
-    if (errors.length > 0) {
-      return jsonOk({
-        ok: false,
-        errors,
+        formatDetected: parseResult.formatDetected,
+        errors: parseResult.errors || [],
       });
     }
 
@@ -174,8 +138,11 @@ export async function POST(request: Request) {
         title: quiz.title,
         existingQuestionCount: existingCount,
       },
-      questions: validQuestions,
-      total: validQuestions.length,
+      formatDetected: parseResult.formatDetected,
+      warnings: parseResult.warnings || [],
+      questions: parseResult.questions,
+      total: parseResult.questions?.length || 0,
     });
   }
 }
+

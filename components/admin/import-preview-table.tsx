@@ -14,6 +14,8 @@ interface ImportPreviewTableProps {
   quizTitle: string;
   existingQuestionCount: number;
   questions: QuestionInput[];
+  formatDetected?: string;
+  warnings?: string[];
   replaceExisting: boolean;
   onChangeReplaceExisting: (replace: boolean) => void;
   onReset: () => void;
@@ -25,6 +27,8 @@ export function ImportPreviewTable({
   quizTitle,
   existingQuestionCount,
   questions,
+  formatDetected,
+  warnings,
   replaceExisting,
   onChangeReplaceExisting,
   onReset,
@@ -42,10 +46,17 @@ export function ImportPreviewTable({
         <div className="flex items-center gap-3">
           <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
           <div>
-            <h3 className="font-bold text-base">
-              Đã kiểm tra thành công {questions.length} câu hỏi hợp lệ
-            </h3>
-            <p className="text-xs text-emerald-700">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-base">
+                Đã kiểm tra thành công {questions.length} câu hỏi hợp lệ
+              </h3>
+              {formatDetected && (
+                <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800 border border-blue-200">
+                  Định dạng phát hiện: {formatDetected}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-emerald-700 mt-0.5">
               Quiz đích: <strong className="font-semibold text-emerald-950">&quot;{quizTitle}&quot;</strong>
             </p>
           </div>
@@ -60,6 +71,17 @@ export function ImportPreviewTable({
           Chọn file / dữ liệu khác
         </button>
       </div>
+
+      {/* Light Warnings if present */}
+      {warnings && warnings.length > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-blue-900 text-xs flex flex-col gap-1">
+          {warnings.map((w, idx) => (
+            <p key={idx} className="font-medium">
+              ℹ️ {w}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* Warning if existing questions exist */}
       {existingQuestionCount > 0 && (
@@ -90,8 +112,8 @@ export function ImportPreviewTable({
               <tr>
                 <th className="px-3 py-2 w-12 text-center">STT</th>
                 <th className="px-4 py-2">Nội dung câu hỏi</th>
-                <th className="px-4 py-2">Đáp án đúng</th>
-                <th className="px-4 py-2">Lời giải thích chung</th>
+                <th className="px-4 py-2">Gợi ý (Hint)</th>
+                <th className="px-4 py-2">Đáp án đúng & Rationales</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -109,13 +131,20 @@ export function ImportPreviewTable({
                     <td className="px-4 py-3 font-medium text-foreground max-w-xs truncate">
                       {q.questionText}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
+                    <td className="px-4 py-3 text-amber-800 dark:text-amber-300 max-w-xs truncate">
+                      {q.hint ? `💡 ${q.hint}` : <span className="text-muted-foreground italic">(Không có)</span>}
+                    </td>
+                    <td className="px-4 py-3 max-w-sm space-y-1">
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800 mb-1">
                         {optLetter}. {correctOpt?.text}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">
-                      {q.generalExplanation}
+                      <div className="space-y-0.5 text-[11px] text-muted-foreground">
+                        {q.options.map((opt, oIdx) => (
+                          <div key={oIdx} className={opt.isCorrect ? "font-semibold text-emerald-700" : ""}>
+                            <span className="font-bold">{["A", "B", "C", "D"][oIdx]}:</span> {opt.explanation || "(Không có)"}
+                          </div>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 );

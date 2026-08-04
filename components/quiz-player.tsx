@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { OptionCard } from "@/components/option-card";
-import { ExplanationPanel } from "@/components/explanation-panel";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Loader2, Trophy, RotateCcw, ArrowLeft } from "lucide-react";
+import { ArrowRight, Loader2, Trophy, RotateCcw, ArrowLeft, Lightbulb } from "lucide-react";
 import type {
   QuizQuestionItem,
   AnswerResult,
@@ -42,6 +41,7 @@ export function QuizPlayer({
   const [totalQuestions, setTotalQuestions] = useState<number>(initialTotalQuestions);
   const [answersMap, setAnswersMap] = useState<Record<string, AnswerResult>>({});
   const [selectedMap, setSelectedMap] = useState<Record<string, string>>({});
+  const [showHintMap, setShowHintMap] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -54,6 +54,15 @@ export function QuizPlayer({
   const currentSelectedOptionId = currentQ ? selectedMap[currentQ.questionId] || null : null;
   const currentAnswerResult = currentQ ? answersMap[currentQ.questionId] || null : null;
   const answered = !!currentAnswerResult;
+  const showHint = currentQ ? !!showHintMap[currentQ.questionId] : false;
+
+  function toggleHint() {
+    if (!currentQ?.hint) return;
+    setShowHintMap((prev) => ({
+      ...prev,
+      [currentQ.questionId]: !prev[currentQ.questionId],
+    }));
+  }
 
   function handleSelectOption(optionId: string) {
     if (!currentQ || answered || submitting || restarting) return;
@@ -298,11 +307,35 @@ export function QuizPlayer({
         </div>
 
         {/* Question Text */}
-        <div className="mb-6 rounded-xl border bg-card p-5 shadow-sm">
+        <div className="mb-4 rounded-xl border bg-card p-5 shadow-sm">
           <p className="text-base font-medium text-foreground leading-relaxed whitespace-pre-wrap">
             {currentQ.questionText}
           </p>
         </div>
+
+        {/* Hint Section */}
+        {currentQ.hint && currentQ.hint.trim() !== "" && (
+          <div className="mb-6 space-y-2">
+            <button
+              type="button"
+              onClick={toggleHint}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 transition-colors hover:bg-amber-500/20"
+            >
+              <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+              <span>{showHint ? "Ẩn gợi ý" : "💡 Gợi ý"}</span>
+            </button>
+
+            {showHint && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-900 dark:text-amber-200 animate-fade-in leading-relaxed">
+                <div className="flex items-center gap-1.5 font-semibold mb-1 text-amber-800 dark:text-amber-300">
+                  <Lightbulb className="h-4 w-4 text-amber-500" />
+                  <span>Gợi ý</span>
+                </div>
+                <p className="whitespace-pre-wrap">{currentQ.hint}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Options */}
         <div className="mb-6 space-y-3">
@@ -324,13 +357,6 @@ export function QuizPlayer({
             );
           })}
         </div>
-
-        {/* General Explanation (after answered) */}
-        {answered && currentAnswerResult && (
-          <div className="mb-6">
-            <ExplanationPanel generalExplanation={currentAnswerResult.generalExplanation} />
-          </div>
-        )}
 
         {/* Error notification */}
         {error && (

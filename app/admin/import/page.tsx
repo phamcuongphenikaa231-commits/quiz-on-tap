@@ -34,6 +34,8 @@ function ImportPageContent() {
     quizTitle: string;
     existingQuestionCount: number;
     questions: QuestionInput[];
+    formatDetected?: string;
+    warnings?: string[];
   } | null>(null);
 
   const [errors, setErrors] = useState<RowErrorItem[] | null>(null);
@@ -149,6 +151,8 @@ function ImportPageContent() {
           quizTitle: data.data.quiz.title,
           existingQuestionCount: data.data.quiz.existingQuestionCount,
           questions: data.data.questions,
+          formatDetected: data.data.formatDetected,
+          warnings: data.data.warnings,
         });
       }
     } catch {
@@ -279,6 +283,8 @@ function ImportPageContent() {
               quizTitle={previewData.quizTitle}
               existingQuestionCount={previewData.existingQuestionCount}
               questions={previewData.questions}
+              formatDetected={previewData.formatDetected}
+              warnings={previewData.warnings}
               replaceExisting={replaceExisting}
               onChangeReplaceExisting={setReplaceExisting}
               onReset={handleReset}

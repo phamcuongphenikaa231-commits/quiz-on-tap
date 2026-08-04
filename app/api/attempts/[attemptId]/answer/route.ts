@@ -57,7 +57,6 @@ export async function POST(
         isCorrect: boolean;
         correctOptionId: string;
         selectedOptionId: string;
-        generalExplanation: string;
         options: Array<{
           id: string;
           isCorrect: boolean;

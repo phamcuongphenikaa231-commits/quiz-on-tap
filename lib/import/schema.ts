@@ -12,7 +12,8 @@ export const optionImportSchema = z.object({
 export const questionImportSchema = z
   .object({
     questionText: z.string().trim().min(1, "Nội dung câu hỏi không được để trống"),
-    generalExplanation: z.string().trim().default(""),
+    hint: z.string().trim().default(""),
+    generalExplanation: z.string().trim().optional(),
     sortOrder: z.number().int().optional(),
     options: z
       .array(optionImportSchema)

@@ -45,7 +45,7 @@ export function normalizeRow(
   const optionD = row["option_d"] ?? "";
   const explanationD = row["explanation_d"] ?? "";
   const rawCorrectAnswer = (row["correct_answer"] ?? "").trim().toUpperCase();
-  const generalExplanation = row["general_explanation"] ?? "";
+  const hint = row["hint"] ?? row["gợi_ý"] ?? row["goi_y"] ?? "";
   const rawSortOrder = (row["sort_order"] ?? "").trim();
 
   // Validate correct_answer
@@ -75,7 +75,7 @@ export function normalizeRow(
   // Construct question object
   const candidate: QuestionInput = {
     questionText,
-    generalExplanation,
+    hint,
     sortOrder,
     options: [
       {
@@ -112,7 +112,7 @@ export function normalizeRow(
       const fieldPath = issue.path.join(".");
       let fieldName = fieldPath;
       if (fieldPath === "questionText") fieldName = "question_text";
-      else if (fieldPath === "generalExplanation") fieldName = "general_explanation";
+      else if (fieldPath === "hint") fieldName = "hint";
       else if (fieldPath === "options.0.text") fieldName = "option_a";
       else if (fieldPath === "options.0.explanation") fieldName = "explanation_a";
       else if (fieldPath === "options.1.text") fieldName = "option_b";
